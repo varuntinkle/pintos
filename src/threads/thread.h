@@ -92,7 +92,9 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-
+    int64_t sleep_start;                 /* Sleeping Start */
+    int64_t deadline;                   /*Ending time */
+    int original_priority;              /* Keeps Track of Original Priority */
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -107,6 +109,7 @@ struct thread
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 
+void thread_sleep(int64_t);
 void thread_init (void);
 void thread_start (void);
 

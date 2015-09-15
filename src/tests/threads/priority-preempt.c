@@ -13,7 +13,7 @@
 #include "threads/thread.h"
 
 static thread_func simple_thread_func;
-
+static thread_func simple_thread2_func;
 void
 test_priority_preempt (void) 
 {
@@ -22,8 +22,8 @@ test_priority_preempt (void)
 
   /* Make sure our priority is the default. */
   ASSERT (thread_get_priority () == PRI_DEFAULT);
-
-  thread_create ("high-priority", PRI_DEFAULT + 1, simple_thread_func, NULL);
+  //thread_create ("med-priority", PRI_DEFAULT + 1, simple_thread2_func, NULL);
+  thread_create ("hig2-pr1iority", PRI_DEFAULT + 2, simple_thread_func, NULL);
   msg ("The high-priority thread should have already completed.");
 }
 
@@ -35,6 +35,19 @@ simple_thread_func (void *aux UNUSED)
   for (i = 0; i < 5; i++) 
     {
       msg ("Thread %s iteration %d", thread_name (), i);
+      thread_yield ();
+    }
+  msg ("Thread %s done!", thread_name ());
+}
+
+static void 
+simple_thread2_func (void *aux UNUSED) 
+{
+  int i;
+  
+  for (i = 0; i < 5; i++) 
+    {
+      msg ("Med Thread %s iteration %d", thread_name (), i);
       thread_yield ();
     }
   msg ("Thread %s done!", thread_name ());

@@ -22,6 +22,9 @@
 
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
+
+static struct list sleeping_list;  // List of process that are sleeping for some ticks
+
 static struct list ready_list;
 
 /* List of all processes.  Processes are added to this list
@@ -49,7 +52,7 @@ struct kernel_thread_frame
 static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
-
+static long long  ticks;         /* #of timer ticks since start of OS. */
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
@@ -61,6 +64,9 @@ bool thread_mlfqs;
 
 static void kernel_thread (thread_func *, void *aux);
 
+
+static void thread_awake(void);    
+void thread_sleep( int64_t );
 static void idle (void *aux UNUSED);
 static struct thread *running_thread (void);
 static struct thread *next_thread_to_run (void);
@@ -92,6 +98,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  list_init (&sleeping_list);
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -123,7 +130,7 @@ void
 thread_tick (void) 
 {
   struct thread *t = thread_current ();
-
+  ticks++;
   /* Update statistics. */
   if (t == idle_thread)
     idle_ticks++;
@@ -133,11 +140,17 @@ thread_tick (void)
 #endif
   else
     kernel_ticks++;
-
+  
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
-    intr_yield_on_return ();
+  intr_yield_on_return ();
+  
+  //printf("%s\n",thread_name());
+  thread_awake();
 }
+
+
+
 
 /* Prints thread statistics. */
 void
@@ -225,6 +238,7 @@ thread_block (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   thread_current ()->status = THREAD_BLOCKED;
+  //printf("thread_block entry\n");
   schedule ();
 }
 
@@ -247,6 +261,8 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
+  //if (t->priority>thread_current()->priority)
+  //  thread_yield();
   intr_set_level (old_level);
 }
 
@@ -270,7 +286,12 @@ thread_current (void)
      have overflowed its stack.  Each thread has less than 4 kB
      of stack, so a few big automatic arrays or moderate
      recursion can cause stack overflow. */
+  //
+  //printf("%s\n",t->name);
+  
   ASSERT (is_thread (t));
+  //thread_print_stats();
+  //printf("%s\n",t->name);
   ASSERT (t->status == THREAD_RUNNING);
 
   return t;
@@ -316,11 +337,62 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+  list_push_back (&ready_list, &cur->elem);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
 }
+
+
+void
+thread_sleep ( int64_t deadline ) 
+{
+  
+  enum intr_level old_level;
+  old_level = intr_disable ();
+  ASSERT (!intr_context ());
+  struct thread *cur = thread_current ();
+  cur->deadline = deadline;
+  cur->sleep_start =timer_ticks();
+  list_push_back (&sleeping_list, & (cur->elem) );
+  thread_block();
+  intr_set_level (old_level);
+  
+}
+
+
+void
+thread_awake ( void ) 
+{
+  enum intr_level old_level;
+  old_level = intr_disable ();
+  struct list_elem *start,*end;
+  start = list_begin (&sleeping_list);
+  end = list_end (&sleeping_list);
+  while ( start!=end    )
+  {
+    struct thread *f = list_entry (start, struct thread, elem);
+    int64_t deadline=f->deadline;
+    int64_t sleep_start=f->sleep_start;
+    if ( timer_elapsed(sleep_start) >= deadline )
+    {
+      start = list_remove(start);
+      start = list_begin(&sleeping_list);
+      thread_unblock(f);
+    }
+    else
+    {
+        start=list_next(start);
+    }
+    
+  }
+  intr_set_level (old_level);
+}
+
+
+
+
+
 
 /* Invoke function 'func' on all threads, passing along 'aux'.
    This function must be called with interrupts off. */
@@ -462,12 +534,12 @@ init_thread (struct thread *t, const char *name, int priority)
   ASSERT (t != NULL);
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
-
   memset (t, 0, sizeof *t);
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
+  t->original_priority = priority;
   t->magic = THREAD_MAGIC;
   list_push_back (&all_list, &t->allelem);
 }
@@ -485,6 +557,18 @@ alloc_frame (struct thread *t, size_t size)
   return t->stack;
 }
 
+
+/*Chooses highest priority node from the list */
+
+bool max_priority(struct thread *a, struct thread *b, void *aux)
+{
+  
+  if (a->priority>=b->priority)
+    return false;
+    return true;
+
+}
+
 /* Chooses and returns the next thread to be scheduled.  Should
    return a thread from the run queue, unless the run queue is
    empty.  (If the running thread can continue running, then it
@@ -494,8 +578,18 @@ static struct thread *
 next_thread_to_run (void) 
 {
   if (list_empty (&ready_list))
-    return idle_thread;
+    {
+      return idle_thread;
+    }
   else
+    /*{
+      struct list_elem *a1;
+      struct thread* t;
+      a1= list_min( &ready_list, (max_priority), 0);
+      t=list_entry (a1, struct thread, elem);
+      list_remove(a1);
+      return t;
+    }*/
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
 }
 
