@@ -2,3 +2,4 @@
 Changes Done-Using Next highest priority thread. Probably Done.
 To Work on Premption of thread
 Priority preempt test is working fine.
+Priority lower working fine.

@@ -65,6 +65,7 @@ bool thread_mlfqs;
 static void kernel_thread (thread_func *, void *aux);
 
 
+
 static void thread_awake(void);    
 void thread_sleep( int64_t );
 static void idle (void *aux UNUSED);
@@ -267,9 +268,8 @@ thread_unblock (struct thread *t)
     {
       if (strcmp(t->name,"main")!=0)
       {
-        printf("Loc0 %s %s\n",t->name,thread_current()->name);
+        
         thread_yield();
-        //printf("Loc3 %s %s\n",t->name,thread_current()->name);
       }
     }
    intr_set_level (old_level); 
@@ -425,7 +425,14 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
+  struct list_elem *a1;
+  struct thread* t;
   thread_current ()->priority = new_priority;
+  a1= list_max( &ready_list, &(max_priority), 0);
+  t=list_entry (a1, struct thread, elem);
+  if(t->tid!=thread_current()->tid)  //Checking if the id of the thread with highest priority
+    thread_yield();                  // is same as current thread if not then yield the thread
+ 
 }
 
 /* Returns the current thread's priority. */
