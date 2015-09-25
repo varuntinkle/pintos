@@ -221,7 +221,7 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-
+  //thread_yield();
   return tid;
 }
 
@@ -261,9 +261,19 @@ thread_unblock (struct thread *t)
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
-  //if (t->priority>thread_current()->priority)
-  //  thread_yield();
-  intr_set_level (old_level);
+  //intr_set_level (old_level);
+  
+  if (t !=idle_thread  && t->priority>thread_current()->priority)
+    {
+      if (strcmp(t->name,"main")!=0)
+      {
+        printf("Loc0 %s %s\n",t->name,thread_current()->name);
+        thread_yield();
+        //printf("Loc3 %s %s\n",t->name,thread_current()->name);
+      }
+    }
+   intr_set_level (old_level); 
+  
 }
 
 /* Returns the name of the running thread. */
@@ -332,9 +342,9 @@ thread_yield (void)
 {
   struct thread *cur = thread_current ();
   enum intr_level old_level;
-  
+  //printf("Loc 1 %s\n",thread_name);
   ASSERT (!intr_context ());
-
+  
   old_level = intr_disable ();
   if (cur != idle_thread) 
   list_push_back (&ready_list, &cur->elem);
@@ -559,13 +569,16 @@ alloc_frame (struct thread *t, size_t size)
 
 
 /*Chooses highest priority node from the list */
-
-bool max_priority(struct thread *a, struct thread *b, void *aux)
-{
-  
-  if (a->priority>=b->priority)
-    return false;
+//New code
+bool max_priority(struct list_elem *max ,  struct list_elem * e, void *aux)
+{ 
+  /* 
+  Find the maximum among thread a and thread b according to priority and get it to run */
+  struct thread *thread1=list_entry (max, struct thread, elem);
+  struct thread *thread2=list_entry (e, struct thread, elem);
+  if (thread2->priority>thread1->priority)
     return true;
+    return false;
 
 }
 
@@ -582,15 +595,18 @@ next_thread_to_run (void)
       return idle_thread;
     }
   else
-    /*{
+    {
+      /* Finding the thread with maximum priority to run */
       struct list_elem *a1;
       struct thread* t;
-      a1= list_min( &ready_list, (max_priority), 0);
+      a1= list_max( &ready_list, &(max_priority), 0);
       t=list_entry (a1, struct thread, elem);
-      list_remove(a1);
+      list_remove(a1);  
       return t;
-    }*/
+    }
+    /* Original Code
     return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    */
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -660,6 +676,8 @@ schedule (void)
   if (cur != next)
     prev = switch_threads (cur, next);
   thread_schedule_tail (prev);
+  /*if (next != idle_thread)
+  printf("Location Schedule  %s %s\n",cur->name, next->name); */
 }
 
 /* Returns a tid to use for a new thread. */
