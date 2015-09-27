@@ -180,6 +180,7 @@ tid_t
 thread_create (const char *name, int priority,
                thread_func *function, void *aux) 
 {
+  //printf("Loc: Thread Create %s %d\n",thread_current()->name,thread_current()->priority);
   struct thread *t;
   struct kernel_thread_frame *kf;
   struct switch_entry_frame *ef;
@@ -222,7 +223,7 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-  //thread_yield();
+
   return tid;
 }
 
@@ -255,24 +256,28 @@ void
 thread_unblock (struct thread *t) 
 {
   enum intr_level old_level;
-
   ASSERT (is_thread (t));
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
   list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
-  //intr_set_level (old_level);
+  //printf("Loc0:Thread_unblock %s %d  %s %d\n",t->name,t->priority,thread_current()->name, thread_current()->priority);
+   
+
   
   if (t !=idle_thread  && t->priority>thread_current()->priority)
     {
-      if (strcmp(t->name,"main")!=0)
-      {
-        
-        thread_yield();
+      if ( !( (strcmp(t->name,"main")==0) &&(thread_current()==idle_thread) ) )
+      {        
+
+        //printf("Loc1:Thread_unblock %s %s\n",t->name,thread_current()->name) ;
+        if(!intr_context())
+        thread_yield() ;
       }
     }
    intr_set_level (old_level); 
+
   
 }
 
@@ -297,6 +302,7 @@ thread_current (void)
      of stack, so a few big automatic arrays or moderate
      recursion can cause stack overflow. */
   //
+  //if (t!=idle_thread)
   //printf("%s\n",t->name);
   
   ASSERT (is_thread (t));
@@ -340,9 +346,21 @@ thread_exit (void)
 void
 thread_yield (void) 
 {
+
+  /*struct list_elem* e;
+  for (e = list_begin (&ready_list); e != list_end (&ready_list);
+           e = list_next (e))
+        {
+          struct thread *f = list_entry (e, struct thread, elem);
+          printf("%s ",f->name);
+        }
+        printf("\n");   */
+
+  //printf("Location: Thread Yield %s\n",thread_current()->name);
   struct thread *cur = thread_current ();
+  //while( thread_current()->give_now==0 )
+  //  thread_current()->give_now=1;
   enum intr_level old_level;
-  //printf("Loc 1 %s\n",thread_name);
   ASSERT (!intr_context ());
   
   old_level = intr_disable ();
@@ -364,6 +382,7 @@ thread_sleep ( int64_t deadline )
   struct thread *cur = thread_current ();
   cur->deadline = deadline;
   cur->sleep_start =timer_ticks();
+  //printf("%s\n", thread_current()->name);
   list_push_back (&sleeping_list, & (cur->elem) );
   thread_block();
   intr_set_level (old_level);
@@ -374,6 +393,7 @@ thread_sleep ( int64_t deadline )
 void
 thread_awake ( void ) 
 {
+
   enum intr_level old_level;
   old_level = intr_disable ();
   struct list_elem *start,*end;
@@ -388,6 +408,7 @@ thread_awake ( void )
     {
       start = list_remove(start);
       start = list_begin(&sleeping_list);
+      //printf("%s\n",f->name);
       thread_unblock(f);
     }
     else
@@ -425,14 +446,38 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  struct list_elem *a1;
-  struct thread* t;
-  thread_current ()->priority = new_priority;
-  a1= list_max( &ready_list, &(max_priority), 0);
-  t=list_entry (a1, struct thread, elem);
-  if(t->tid!=thread_current()->tid)  //Checking if the id of the thread with highest priority
-    thread_yield();                  // is same as current thread if not then yield the thread
- 
+  enum intr_level old_level;
+  old_level = intr_disable();
+  
+  int x1 = thread_current()->priority;
+  x1 = x1 - new_priority;
+  while(thread_current()->priority!=new_priority)
+  {
+    //printf("Loc:thread_set_priority Loop %s %d %d\n",
+    //thread_current()->name,thread_current()->priority,new_priority);
+    thread_current()->priority=new_priority;
+  }
+  
+  //printf("Loc: values after loop %d %d %d\n",new_priority,thread_current()->priority,x1);
+  if(x1>0)
+  {
+    struct list_elem *a1;
+    struct thread* t;
+    a1= list_max( &ready_list, &(max_priority), 0);
+    t=list_entry (a1, struct thread, elem );
+    //printf("Loc: thread_set_priority checkpint %s %d %s %d \n",
+    //thread_current()->name,thread_current()->priority,t->name,t->priority);
+    if(t->priority > new_priority)
+      {
+        thread_yield();
+        //printf("End %s\n",thread_current()->name,thread_current()->priority,t->priority);
+      }
+  }
+
+
+  intr_set_level(old_level);
+
+  
 }
 
 /* Returns the current thread's priority. */
@@ -548,6 +593,7 @@ is_thread (struct thread *t)
 static void
 init_thread (struct thread *t, const char *name, int priority)
 {
+  //printf("Loc:init thread %s\n",t->name);
   ASSERT (t != NULL);
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
@@ -558,6 +604,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->original_priority = priority;
   t->magic = THREAD_MAGIC;
+  //t->give_now=0;
   list_push_back (&all_list, &t->allelem);
 }
 
@@ -583,10 +630,15 @@ bool max_priority(struct list_elem *max ,  struct list_elem * e, void *aux)
   Find the maximum among thread a and thread b according to priority and get it to run */
   struct thread *thread1=list_entry (max, struct thread, elem);
   struct thread *thread2=list_entry (e, struct thread, elem);
-  if (thread2->priority>thread1->priority)
-    return true;
-    return false;
+  //printf("Loc:max_priority",thread2->name);
+  if(is_thread(thread2) && is_thread(thread1))
+  {
 
+    if (thread2->priority>thread1->priority )
+      return true;
+      return false;
+  }
+  return false;
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -683,8 +735,8 @@ schedule (void)
   if (cur != next)
     prev = switch_threads (cur, next);
   thread_schedule_tail (prev);
-  /*if (next != idle_thread)
-  printf("Location Schedule  %s %s\n",cur->name, next->name); */
+  //while(thread_current()->give_now==1)
+  //  thread_current()->give_now=0;
 }
 
 /* Returns a tid to use for a new thread. */

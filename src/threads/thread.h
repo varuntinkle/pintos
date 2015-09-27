@@ -95,6 +95,7 @@ struct thread
     int64_t sleep_start;                 /* Sleeping Start */
     int64_t deadline;                   /*Ending time */
     int original_priority;              /* Keeps Track of Original Priority */
+    //int give_now;                       /*If True Next Iteration this thread will not be used */
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */

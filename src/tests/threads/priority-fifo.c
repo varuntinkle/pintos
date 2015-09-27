@@ -51,6 +51,7 @@ test_priority_fifo (void)
   lock_init (&lock);
 
   thread_set_priority (PRI_DEFAULT + 2);
+  //msg("This thread %s has priority %d",thread_current()->name,thread_current()->priority);
   for (i = 0; i < THREAD_CNT; i++) 
     {
       char name[16];
@@ -60,9 +61,10 @@ test_priority_fifo (void)
       d->iterations = 0;
       d->lock = &lock;
       d->op = &op;
+      printf("Loc x This thread %s has priority %d\n",
+      thread_current()->name,thread_current()->priority);
       thread_create (name, PRI_DEFAULT + 1, simple_thread_func, d);
     }
-
   thread_set_priority (PRI_DEFAULT);
   /* All the other threads now run to termination here. */
   ASSERT (lock.holder == NULL);
@@ -94,6 +96,8 @@ simple_thread_func (void *data_)
       lock_acquire (data->lock);
       *(*data->op)++ = data->id;
       lock_release (data->lock);
+      //printf("Loc simple_thread_func %s\n",thread_current()->name);
       thread_yield ();
+      //printf("Loc simple_thread_func %s\n",thread_current()->name);
     }
 }

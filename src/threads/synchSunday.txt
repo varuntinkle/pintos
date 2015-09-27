@@ -75,7 +75,10 @@ sema_down (struct semaphore *sema)
       thread_block ();
       printf("Loc Sema Down 2 what happens after blocking %s\n",thread_current()->name);
     }
+  //else
+  {
     sema->value--;
+  }
   intr_set_level (old_level);
 }
 
@@ -117,7 +120,7 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
   old_level = intr_disable ();
   //sema->value++;
-  //int y=sema_value;
+
   if (!list_empty (&sema->waiters)) 
     {
       /*   //Original Code Starts
@@ -132,12 +135,10 @@ sema_up (struct semaphore *sema)
        a1 = list_max( &sema->waiters, &(max_priority), 0 );
        t = list_entry (a1, struct thread, elem);
        printf ("Loc: Sema_Up %s\n", t->name );
-       list_remove( a1 );
-       //while(sema_value==y)
-       sema->value++;  
+       list_remove( a1 );  
        thread_unblock( t );   
     }
-  else
+  //else
   {
     sema->value++;            //Original Code
   }
@@ -347,22 +348,11 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED)
   ASSERT (cond != NULL);
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
-  ASSERT (lock_held_by_current_thread (lock)); 
-  if (!list_empty (&cond->waiters))
-  {
+  ASSERT (lock_held_by_current_thread (lock));
 
-       /*struct list_elem *a1;     
-       struct semaphore* t;
-       a1 = list_max( &cond->waiters, &(max_priority), 0 );
-       t = list_entry (a1, struct semaphore_elem, elem);
-       list_remove( a1 );
-       sema_up(t); */
-        //Original Code
-      sema_up (&list_entry (list_pop_front (&cond->waiters),
+  if (!list_empty (&cond->waiters)) 
+    sema_up (&list_entry (list_pop_front (&cond->waiters),
                           struct semaphore_elem, elem)->semaphore);
-      
-  } 
-    
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
